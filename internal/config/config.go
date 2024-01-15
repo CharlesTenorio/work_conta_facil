@@ -13,19 +13,29 @@ const (
 )
 
 type Config struct {
-	Mode      string       `json:"mode"`
-	MDBConfig MongoConfig  `json:"mdb_config"`
-	RMQConfig RabbitConfig `json:"rmq_config"`
+	Mode          string `json:"mode"`
+	MongoDBConfig `json:"mongo_config"`
+	RMQConfig     RMQConfig `json:"rmq_config"`
 }
 
-type MongoConfig struct {
-	DB_URI          string            `json:"mdb_uri"`
-	DB_NAME         string            `json:"mdb_name"`
-	MDB_COLLECTIONS map[string]string `json:"mdb_collections"`
+type MongoDBConfig struct {
+	MDB_URI              string            `json:"mdb_uri"`
+	MDB_NAME             string            `json:"mdb_name"`
+	MDB_CLIENT           string            `json:"mdb_client"`
+	MDB_DELIVERY_ADDRESS string            `json:"mdb_delivery_address"`
+	MDB_GRIFE            string            `json:"mdb_grife"`
+	MDB_ORDER            string            `json:"mdb_order"`
+	MDB_DET_ORDER        string            `json:"mdb_det_order"`
+	MDB_PAYMENT          string            `json:"mdb_payment"`
+	MDB_PRODUTC          string            `json:"mdb_product"`
+	MDB_SUPPLIER         string            `json:"mdb_supplier"`
+	MDB_USER             string            `json:"mdb_user"`
+	MDB_COLLECTIONS      map[string]string `json:"mdb_collections"`
 }
 
-type RabbitConfig struct {
-	RMQ_URI string `json:"rmq_uri"`
+type RMQConfig struct {
+	RMQ_URI                  string `json:"rmq_uri"`
+	RMQ_MAXX_RECONNECT_TIMES int    `json:"rmq_maxx_reconnect_times"`
 }
 
 func NewConfig() *Config {
@@ -39,18 +49,18 @@ func NewConfig() *Config {
 
 	SRV_MDB_URI := os.Getenv("SRV_MDB_URI")
 	if SRV_MDB_URI != "" {
-		conf.MDBConfig.DB_URI = SRV_MDB_URI
-	} else {
-		log.Println("environment variable SRV_MDB_URI not found")
-		os.Exit(1)
+		conf.MDB_URI = SRV_MDB_URI
 	}
 
 	SRV_MDB_NAME := os.Getenv("SRV_MDB_NAME")
 	if SRV_MDB_NAME != "" {
-		conf.MDBConfig.DB_NAME = SRV_MDB_NAME
-	} else {
-		log.Println("environment variable SRV_MDB_NAME not found")
-		os.Exit(1)
+		conf.MDB_NAME = SRV_MDB_NAME
+	}
+
+	SRV_MDB_COLLECTIONS := os.Getenv("SRV_MDB_COLLECTIONS")
+	if SRV_MDB_COLLECTIONS != "" {
+		collectionsMap := parseCollectionsString(SRV_MDB_COLLECTIONS)
+		conf.MDB_COLLECTIONS = collectionsMap
 	}
 
 	SRV_RMQ_URI := os.Getenv("SRV_RMQ_URI")
@@ -67,19 +77,20 @@ func NewConfig() *Config {
 func defaultConf() *Config {
 	default_conf := Config{
 		Mode: PRODUCTION,
-		MDBConfig: MongoConfig{
-			DB_URI:          "mongodb://admin:supersenha@localhost:27017/",
-			DB_NAME:         "teste_db",
+		MongoDBConfig: MongoDBConfig{
+			MDB_URI:         "mongodb://admin:supersenha@localhost:27017/",
+			MDB_NAME:        "teste_db",
 			MDB_COLLECTIONS: make(map[string]string),
 		},
-		RMQConfig: RabbitConfig{
+
+		RMQConfig: RMQConfig{
 			RMQ_URI: "amqp://admin:supersenha@localhost:5672/",
 		},
 	}
 	// Adicione as coleções padrão ao mapa MDB_COLLECTIONS
 	defaultCollections := "meiospagamentos, categorias, clientes, fornecedores, orcamentos, produtos, compras"
 	collectionsMap := parseCollectionsString(defaultCollections)
-	default_conf.MDBConfig.MDB_COLLECTIONS = collectionsMap
+	default_conf.MongoDBConfig.MDB_COLLECTIONS = collectionsMap
 
 	return &default_conf
 }

@@ -1,7 +1,10 @@
 package dto
 
 import (
+	"encoding/json"
 	"time"
+
+	"github.com/katana/worker/orcafacil-go/internal/config/logger"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -11,8 +14,20 @@ type ClienteGrupoDto struct {
 }
 
 type FornecedorDto struct {
-	FornecedorID primitive.ObjectID `bson:"fornecedor_id" json:"fornecedor_id"`
-	Produtos     []ProdutoDto       `bson:"produto" json:"produto"`
+	FornecedorID primitive.ObjectID     `bson:"id" json:"id"`
+	Produtos     []ProdutosEmFornecedor `bson:"produtos" json:"produtos"`
+}
+
+func (f FornecedorDto) FornecedorDtoConvet() string {
+	data, err := json.Marshal(f)
+
+	if err != nil {
+		logger.Error("error to convert Client to JSON", err)
+
+		return ""
+	}
+
+	return string(data)
 }
 
 type ProdutoDto struct {
@@ -46,7 +61,7 @@ type OrcamentoFilaPrdFornecedor struct {
 
 type ProdutoEnvidadosParaContacaoDTO struct {
 	ProdutoID  primitive.ObjectID `bson:"produto_id" json:"produto_id"`
-	Nome       string             `bson:"nome_produto" json:"nome_produto"`
+	Nome       string             `bson:"nome" json:"nome"`
 	Quantidade int                `bson:"quantidade" json:"quantidade"`
 }
 

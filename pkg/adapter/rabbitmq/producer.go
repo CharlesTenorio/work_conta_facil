@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/katana/worker/orcafacil-go/internal/config/logger"
-
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 

@@ -2,16 +2,6 @@ package dto
 
 import "go.mongodb.org/mongo-driver/bson/primitive"
 
-type GetJwtInput struct {
-	Email string `json:"email"`
-	Senha string `json:"senha"`
-	Role  string `json:"role"`
-}
-
-type GetJWTOutput struct {
-	AccessToken string `json:"access_token"`
-}
-
 type FornecedoresEmPrd struct {
 	ID         string  `json:"id"`
 	PrecoVenda float64 `json:"preco_venda"`
@@ -19,7 +9,7 @@ type FornecedoresEmPrd struct {
 
 type ProdutosEmFornecedor struct {
 	ID         string  `json:"id"`
-	Descricao  string  `json:"descricao"`
+	Nome       string  `json:"nome"`
 	PrecoVenda float64 `json:"preco_venda"`
 	Enabled    bool    `json:"enabled"`
 }

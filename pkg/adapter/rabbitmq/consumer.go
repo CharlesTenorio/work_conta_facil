@@ -11,7 +11,7 @@ func (rbm *rbm_pool) Consumer(queue_name string, callback func(msg *amqp.Deliver
 
 	HOSTNAME := os.Getenv("HOSTNAME")
 	if HOSTNAME == "" {
-		HOSTNAME = "hoodid-go"
+		HOSTNAME = "worker_conta_facil"
 	}
 
 	msgs, err := rbm.channel.Consume(

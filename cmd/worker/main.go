@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 
 	"github.com/katana/worker/orcafacil-go/internal/config"
 	"github.com/katana/worker/orcafacil-go/pkg/adapter/mongodb"
@@ -15,7 +16,7 @@ var (
 )
 
 func main() {
-
+	os.Setenv("SRV_RMQ_URI", "amqp://admin:supersenha@localhost:5672/")
 	filas := []rabbitmq.Fila{
 		{
 			Name:       "QUEUE_PRDS_PARA_COTACAO",

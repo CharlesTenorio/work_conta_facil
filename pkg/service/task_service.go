@@ -3,15 +3,17 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"os"
 	"time"
 
+	"github.com/katana/worker/orcafacil-go/internal/config/logger"
 	"github.com/katana/worker/orcafacil-go/internal/dto"
 	"github.com/katana/worker/orcafacil-go/pkg/adapter/mongodb"
 	"github.com/katana/worker/orcafacil-go/pkg/adapter/rabbitmq"
-	"github.com/katana/worker/orcafacil-go/pkg/model"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 const DATE_FORMAT = "2006-01-02 15:04:05"
@@ -27,78 +29,123 @@ func NewTaskService(rbmq_conn rabbitmq.RabbitInterface, db_conn mongodb.MongoDBI
 		db_conn:   db_conn,
 	}
 }
-func (tmcs *taskService) ReadFromQueue(queue_name string) (<-chan dto.ProdutoEnviadoParaFilaDeOrcamentoDTO, <-chan error) {
-	output := make(chan dto.ProdutoEnviadoParaFilaDeOrcamentoDTO)
-	errors := make(chan error)
 
-	go func() {
-		tmcs.rbmq_conn.Consumer(queue_name, func(msg *amqp.Delivery) {
-			var produtoMsg dto.ProdutoEnviadoParaFilaDeOrcamentoDTO
+func (tmcs *taskService) RelacionarPrdConFornecedor(ctx context.Context, prsOrcamento dto.ProdutoEnviadoParaFilaDeOrcamentoDTO) error {
+	collection := tmcs.db_conn.GetCollection("fornecedores")
 
-			// Decodificar a mensagem JSON
-			err := json.Unmarshal(msg.Body, &produtoMsg)
-			if err != nil {
-				log.Println("Erro ao decodificar a mensagem JSON:", err)
-				errors <- err
-				return
-			}
+	// Crie um slice de IDs de produtos a serem usados no operador $in
+	var produtos []string
+	for _, produto := range prsOrcamento.Produtos {
+		produtos = append(produtos, produto.Nome)
+	}
 
-			// Enviar a struct para o canal de saída
-			output <- produtoMsg
-		})
-	}()
+	// Construa a consulta com o operador $in
+	filter := bson.M{"produtos.nome": bson.M{"$in": produtos}}
+	projection := bson.M{"_id": 1, "produtos": 1}
 
-	return output, errors
+	// Execute a consulta
+	cursor, err := collection.Find(ctx, filter, options.Find().SetProjection(projection))
+	if err != nil {
+		return err
+	}
+	defer cursor.Close(ctx)
+
+	// Processar os resultados, se necessário
+	for cursor.Next(ctx) {
+		var fornec dto.FornecedorDto // Substitua "model.Fornecedor" pelo tipo real do documento
+		if err = cursor.Decode(&fornec); err != nil {
+			return err
+		}
+
+		err = tmcs.UpdateForncedorPrd(ctx, prsOrcamento.IdOrcamento.String(), &fornec)
+		if err != nil {
+			logger.Error("Erro ao chamar UpdateForncedorPrd", err)
+			// Trate o erro conforme necessário
+		}
+
+		fornecedorJson := fornec.FornecedorDtoConvet()
+		logger.Info(fornecedorJson)
+		// Faça algo com o fornecedor encontrado
+
+	}
+
+	if err := cursor.Err(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (tmcs *taskService) consumerCallback(msg *amqp.Delivery) {
 
-	log.Println("New MSG received")
-
-	mc := &model.MessageConversator{}
-	err := json.Unmarshal(msg.Body, mc)
+	prdContacao := &dto.ProdutoEnviadoParaFilaDeOrcamentoDTO{}
+	err := json.Unmarshal(msg.Body, prdContacao)
 	if err != nil {
-		log.Println("Failed to read a consumer msg")
-		log.Println(err)
+		logger.Error("Erro to Unmarshal MSG Status", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	mc.CreatedAt = time.Now().Format(time.RFC3339)
-
-	err = tmcs.ReceiveMessage(ctx, mc)
+	err = tmcs.RelacionarPrdConFornecedor(context.Background(), *prdContacao)
 	if err != nil {
-		log.Println("Failed to save msg")
-		log.Println(err)
-
-		dlq_msg := &rabbitmq.Message{
-			Data:        msg.Body,
-			ContentType: msg.ContentType,
-		}
-
-		err := tmcs.rbmq_conn.Publish("FINANCIAL_MESSAGE_COUNTER_DLQ", dlq_msg)
-		if err != nil {
-			log.Println("Failed to save msg in DLQ")
-			log.Println(err)
-			log.Println(string(dlq_msg.Data))
-		}
+		logger.Error("Erro to RelacionarPrdConFornecedor", err)
 	}
 
 	if err := msg.Ack(false); err != nil {
-		log.Println("Erro to ACK MSG Status")
+		logger.Error("Erro to ACK MSG Status", err)
 	} else {
-		log.Println("MSG Status update success")
+		logger.Info("MSG Status update success")
 	}
 }
 
-func (tmcs *task_message_counter_service) Run() {
+func (tmcs *taskService) Run() {
 
 	err := tmcs.rbmq_conn.Connect()
 	if err != nil {
-		log.Println(err)
+		logger.Error("Erro to Connect in RabbitMQ Channel", err)
 		os.Exit(1)
 	}
 
-	tmcs.rbmq_conn.Start("FINANCIAL_MESSAGE_COUNTER", tmcs.consumerCallback)
+	tmcs.rbmq_conn.Start("QUEUE_PRDS_PARA_COTACAO", tmcs.consumerCallback)
+}
+
+func (tmcs *taskService) UpdateForncedorPrd(ctx context.Context, ID string, fornecedorUpdate *dto.FornecedorDto) error {
+	collection := tmcs.db_conn.GetCollection("orcamentos")
+
+	opts := options.Update().SetUpsert(true)
+	objectID, err := primitive.ObjectIDFromHex(ID)
+	if err != nil {
+		logger.Error("Error to parse ObjectIDFromHex", err)
+
+	}
+	filter := bson.D{
+		{Key: "_id", Value: objectID},
+	}
+
+	// Criando um mapa para armazenar as atualizações dinâmicas
+	updateFields := make(map[string]interface{})
+
+	// Adicionando todos os campos que você deseja atualizar
+	updateFields["updated_at"] = time.Now().Format(time.RFC3339)
+	updateFields["status"] = "enviado para fornecedor(s)"
+
+	// Adiciona o campo Fornecedores ao mapa de atualização
+	updateFields["fornecedor.id"] = fornecedorUpdate.FornecedorID
+	updateFields["fornecedor.produtos"] = fornecedorUpdate.Produtos
+
+	// Criando a atualização dinâmica com os campos fornecidos
+	var updateFieldsDoc bson.D
+	for key, value := range updateFields {
+		updateFieldsDoc = append(updateFieldsDoc, bson.E{Key: key, Value: value})
+	}
+
+	// Criando a atualização final
+	update := bson.D{{Key: "$set", Value: updateFieldsDoc}}
+
+	// Executando a atualização
+	_, err = collection.UpdateOne(ctx, filter, update, opts)
+	if err != nil {
+		logger.Error("Error while updating data", err)
+		return err
+	}
+
+	return nil
 }

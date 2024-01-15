@@ -32,7 +32,7 @@ func New(conf *config.Config) MongoDBInterface {
 		return mdbpool
 
 	} else {
-		client, err := mongo.Connect(ctx, options.Client().ApplyURI(conf.MDBConfig.DB_URI))
+		client, err := mongo.Connect(ctx, options.Client().ApplyURI(conf.MDB_URI))
 		if err != nil {
 			log.Fatal("Erro to make Connect DB:", err.Error())
 			logger.Error("Erro to make Connect DB:"+err.Error(), err)
@@ -46,8 +46,8 @@ func New(conf *config.Config) MongoDBInterface {
 
 		mdbpool = &mongodb_pool{
 			DB:            client,
-			DBName:        conf.MDBConfig.DB_NAME,
-			DBCollections: conf.MDBConfig.MDB_COLLECTIONS,
+			DBName:        conf.MDB_NAME,
+			DBCollections: conf.MDB_COLLECTIONS,
 		}
 
 	}
